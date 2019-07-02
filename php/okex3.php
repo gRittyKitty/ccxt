@@ -566,16 +566,14 @@ class okex3 extends Exchange {
             'amount' => $amountPrecision,
             'price' => $pricePrecision,
         );
-        $minAmount = $this->safe_float($market, 'base_min_size');
+        $minAmount = $this->safe_float_2($market, 'min_size', 'base_min_size');
         $minPrice = $this->safe_float($market, 'tick_size');
         if ($precision['price'] !== null) {
             $minPrice = pow(10, -$precision['price']);
         }
-        $minCost = $this->safe_float($market, 'min_size');
-        if ($minCost === null) {
-            if ($minAmount !== null && $minPrice !== null) {
-                $minCost = $minAmount * $minPrice;
-            }
+        $minCost = null;
+        if ($minAmount !== null && $minPrice !== null) {
+            $minCost = $minAmount * $minPrice;
         }
         $active = true;
         $fees = $this->safe_value_2($this->fees, $marketType, 'trading', array());
@@ -1794,13 +1792,13 @@ class okex3 extends Exchange {
         if ($symbol === null) {
             throw new ArgumentsRequired($this->id . ' fetchOrder requires a $symbol argument');
         }
-        $defaultType = $this->safe_string_2($this->options, 'fetchOrder', 'defaultType');
+        $this->load_markets();
+        $market = $this->market ($symbol);
+        $defaultType = $this->safe_string_2($this->options, 'fetchOrder', 'defaultType', $market['type']);
         $type = $this->safe_string($params, 'type', $defaultType);
         if ($type === null) {
             throw new ArgumentsRequired($this->id . " fetchOrder requires a $type parameter (one of 'spot', 'margin', 'futures', 'swap').");
         }
-        $this->load_markets();
-        $market = $this->market ($symbol);
         $instrumentId = ($market['futures'] || $market['swap']) ? 'InstrumentId' : '';
         $method = $type . 'GetOrders' . $instrumentId;
         $request = array (
@@ -2223,17 +2221,32 @@ class okex3 extends Exchange {
             $address = $addressFrom;
         }
         $currencyId = $this->safe_string($transaction, 'currency');
+        $code = null;
         if ($currencyId !== null) {
-            $currencyId = strtoupper($currencyId);
+            $uppercaseId = $currencyId;
+            $currencyId = strtolower($currencyId);
+            if (is_array($this->currencies_by_id) && array_key_exists($currencyId, $this->currencies_by_id)) {
+                $currency = $this->currencies_by_id[$currencyId];
+                $code = $currency['code'];
+            } else {
+                $code = $this->common_currency_code($uppercaseId);
+            }
         }
-        $code = $this->common_currency_code($currencyId);
         $amount = $this->safe_float($transaction, 'amount');
         $status = $this->parse_transaction_status ($this->safe_string($transaction, 'status'));
         $txid = $this->safe_string($transaction, 'txid');
         $timestamp = $this->parse8601 ($this->safe_string($transaction, 'timestamp'));
-        $feeCost = $this->safe_float($transaction, 'fee');
+        $feeCost = null;
         if ($type === 'deposit') {
             $feeCost = 0;
+        } else {
+            if ($currencyId !== null) {
+                $feeWithCurrencyId = $this->safe_string($transaction, 'fee');
+                if ($feeWithCurrencyId !== null) {
+                    $feeWithoutCurrencyId = str_replace($currencyId, '', $feeWithCurrencyId);
+                    $feeCost = floatval ($feeWithoutCurrencyId);
+                }
+            }
         }
         // todo parse tags
         return array (
@@ -2625,7 +2638,7 @@ class okex3 extends Exchange {
         $referenceId = $this->safe_string($details, 'order_id');
         $referenceAccount = null;
         $type = $this->parse_ledger_entry_type ($this->safe_string($item, 'type'));
-        $code = $this->safeCurrencyCode ($item, 'currency', $currency);
+        $code = $this->safeCurrencyCode ($this->safe_string($item, 'currency'), $currency);
         $amount = $this->safe_float($item, 'amount');
         $timestamp = $this->parse8601 ($this->safe_string($item, 'timestamp'));
         $fee = array (

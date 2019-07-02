@@ -365,6 +365,16 @@ class binance (Exchange):
             'info': ticker,
         }
 
+    def fetch_status(self, params={}):
+        systemStatus = self.wapiGetSystemStatus()
+        status = self.safe_value(systemStatus, 'status')
+        if status is not None:
+            self.status = self.extend(self.status, {
+                'status': status == 'ok' if 0 else 'maintenance',
+                'updated': self.milliseconds(),
+            })
+        return self.status
+
     def fetch_ticker(self, symbol, params={}):
         self.load_markets()
         market = self.market(symbol)
@@ -858,7 +868,7 @@ class binance (Exchange):
         #             fromAsset: "ADA"                  },
         orderId = self.safe_string(trade, 'tranId')
         timestamp = self.parse8601(self.safe_string(trade, 'operateTime'))
-        tradedCurrency = self.safeCurrencyCode(trade, 'fromAsset')
+        tradedCurrency = self.safeCurrencyCode(self.safe_string(trade, 'fromAsset'))
         earnedCurrency = self.currency('BNB')['code']
         applicantSymbol = earnedCurrency + '/' + tradedCurrency
         tradedCurrencyIsQuote = False

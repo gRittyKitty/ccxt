@@ -372,6 +372,18 @@ class binance extends Exchange {
         );
     }
 
+    public function fetch_status ($params = array ()) {
+        $systemStatus = $this->wapiGetSystemStatus ();
+        $status = $this->safe_value($systemStatus, 'status');
+        if ($status !== null) {
+            $this->status = array_merge ($this->status, array (
+                'status' => $status === 0 ? 'ok' : 'maintenance',
+                'updated' => $this->milliseconds (),
+            ));
+        }
+        return $this->status;
+    }
+
     public function fetch_ticker ($symbol, $params = array ()) {
         $this->load_markets();
         $market = $this->market ($symbol);
@@ -932,7 +944,7 @@ class binance extends Exchange {
         //             fromAsset => "ADA"                  ),
         $orderId = $this->safe_string($trade, 'tranId');
         $timestamp = $this->parse8601 ($this->safe_string($trade, 'operateTime'));
-        $tradedCurrency = $this->safeCurrencyCode ($trade, 'fromAsset');
+        $tradedCurrency = $this->safeCurrencyCode ($this->safe_string($trade, 'fromAsset'));
         $earnedCurrency = $this->currency ('BNB')['code'];
         $applicantSymbol = $earnedCurrency . '/' . $tradedCurrency;
         $tradedCurrencyIsQuote = false;
